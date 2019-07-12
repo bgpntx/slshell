@@ -1,0 +1,140 @@
+#!/bin/sh
+
+slcmd=$(command -v slcli)
+
+show_menu(){
+	normal=$(echo "\033[m")
+#    normal=`echo "\033[m"`
+    menu=`echo "\033[36m"` #Blue
+    number=`echo "\033[33m"` #yellow
+    bgred=`echo "\033[41m"`
+    fgred=`echo "\033[31m"`
+    printf "\n${menu}*********************************************${normal}\n"
+    printf "${menu}**${number} 1)${menu} Show server info  ${normal}\n"
+    printf "${menu}**${number} 2)${menu} Lookup Softlayer IP ${normal}\n"
+    printf "${menu}**${number} 3)${menu} Shut/Unshut server switch port ${normal}\n"
+    printf "${menu}**${number} 4)${menu} Server power actions ${normal}\n"
+    printf "${menu}**${number} 5)${menu} Ticket actions ${normal}\n"	
+    printf "${menu}*********************************************${normal}\n"
+    printf "Please enter a menu option and enter or ${fgred}x to exit. ${normal}"
+    read opt
+}
+
+option_picked(){
+    msgcolor=`echo "\033[01;31m"` # bold red
+    normal=`echo "\033[00;00m"` # normal white
+    message=${@:-"${normal}Error: No message passed"}
+    printf "${msgcolor}${message}${normal}\n"
+}
+
+clear
+show_menu
+while [ $opt != '' ]
+    do
+    if [ $opt = '' ]; then
+      exit;
+    else
+      case $opt in
+        1) clear;
+            option_picked "Option 1 Picked";
+            read -p 'SL server id: ' id
+            slid=`$slcmd hardware list -H "*$id*" --columns id,hostname --sortby hostname|awk '{print $1}'`
+            sinfo=`$slcmd hardware detail --passwords $slid`
+	    	#fqdn=`slcli hardware detail $sinfo|grep fqdn`
+	    	#status=`slcli hardware detail $sinfo|grep status`
+	    	#datacenter=`slcli hardware detail $sinfo|grep status`
+	    	#public_ip=`slcli hardware detail $sinfo|grep status`
+	    	#private_ip=`slcli hardware detail $sinfo|grep status`
+	    	#ipmi_ip=`slcli hardware detail $sinfo|grep status`
+	    	#os_version=`slcli hardware detail $sinfo|grep status`
+	    	#root=`slcli hardware detail --passwords $sinfo|grep root`
+            
+	    printf "$sinfo"
+	    show_menu;
+        ;;
+        2) clear;
+            option_picked "Option 2 Picked";
+            read -p 'Softlayer IP: ' slip 
+            sident=`$slcmd subnet lookup $slip|egrep -i "identifier"`
+            siname=`$slcmd subnet lookup $slip|egrep -i "name"`
+            echo "Subnet" $sident
+            echo "Server" $siname
+            show_menu;
+        ;;
+        3) clear;
+            option_picked "Option 3 Picked";
+            read -p 'SL server id: ' id
+            read -p 'Choose port speed: shut (0) / unshut (1000): ' speed
+            slid=`$slcmd hardware list -H "*$id*" --columns id,hostname --sortby hostname|awk '{print $1}'`
+                case $speed in
+                    0) echo "Switch shutdown chosen"
+                    $slcmd hardware edit $slid --public-speed $speed
+                ;;
+                    1000) echo "Switch unshut chosen"
+                    $slcmd hardware edit $slid --public-speed $speed
+                ;;
+            esac
+            show_menu;
+        ;;
+        4) clear;
+             option_picked "Option 4 Picked";
+             read -p 'SL server id: ' id
+             read -p 'Action: 1) reboot / 2) rescue / 3) power-on / 4) power-off: ' action
+             slid=`$slcmd hardware list -H "*$id*" --columns id,hostname --sortby hostname|awk '{print $1}'`
+             case $action in
+                     1) echo "Reboot of $slid initiated"
+                     $slcmd hardware reboot $slid
+                 ;;
+                     2) echo "Rescue initiated"
+                     $slcmd hardware rescue $slid
+                 ;;
+                     3) echo "Power on initiated"
+                      $slcmd hardware power-on $slid
+                 ;;
+                    4) echo "Power off initiated"
+                      $slcmd hardware power-off $slid
+                  ;;
+             esac
+             show_menu;
+        ;;
+	5) clear;
+		option_picked "Option 5 Picked";
+		read -p 'Choose ticket action: 1) Create / 2) Update / 3) Attach server to the ticket / 4) View ticket content: ' action
+#             	slid=`$slcmd hardware list -H "*$id*" --columns id,hostname --sortby hostname|awk '{print $1}'`
+             	case $action in
+                     1) read -p 'Choose ticket subject: 1021 - Hardware Issue, 1022 - Public Network Question: ' tisubj
+			read -p 'Choose ticket title: ' titit
+			read -p 'Choose ticket priority from 1 (Critical) to 4 (Minimal Impact): ' tipri
+			echo $titsubj
+			echo $titit
+			slcli ticket create --title "'$titit'" --subject-id $tisubj --priority $tipri
+                 ;;
+		     2) read -p 'Which ticket you would like to update: ' tiid
+			$slcmd ticket update $tiid
+			     ;;
+                     3) echo "Which server should be attached to wich ticket"
+                     	read -p 'Choose Ticket ID: ' tiid
+			read -p 'Choose server Uber service ID: ' id
+		        slid=`$slcmd hardware list -H "*$id*" --columns id,hostname --sortby hostname|awk '{print $1}'`
+			#echo $tiid $id $slid
+			$slcmd ticket attach --hardware $slid $tiid
+		 ;;
+ 		     4) echo "Choose ticket ID: "
+			read -p 'Ticket ID: ' tiid
+			read -p 'Viewable updates number: ' upcount
+			$slcmd ticket detail $tiid --count $upcount|less
+             esac
+             show_menu;
+        ;;
+        x)exit;
+        ;;
+        \r)exit;
+        ;;
+        *)clear;
+            option_picked "Pick an option from the menu";
+            show_menu;
+        ;;
+      esac
+    fi
+done
+
